@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Remote 3DS",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/build/bin/moonlight3ds",
+        "args": [],
+        "stopAtEntry": false,
+        "cwd": "${workspaceFolder}/src",
+        "environment": [],
+        "externalConsole": false,
+        "MIMode": "gdb",
+        "miDebuggerPath": "/opt/devkitpro/devkitARM/bin/arm-none-eabi-gdb",
+        "setupCommands": [
+          {
+            "description": "Enable pretty-printing for gdb",
+            "text": "-enable-pretty-printing",
+            "ignoreFailures": true
+          }
+        ],
+        "miDebuggerServerAddress": "192.168.0.37:4003",
+        "serverLaunchTimeout": 10000,
+      },
+      {
+        "name": "Local 3DS",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/build/bin/moonlight3ds",
+        "args": [],
+        "stopAtEntry": false,
+        "cwd": "${workspaceFolder}/src",
+        "environment": [],
+        "externalConsole": false,
+        "MIMode": "gdb",
+        "miDebuggerPath": "/opt/devkitpro/devkitARM/bin/arm-none-eabi-gdb",
+        "setupCommands": [
+          {
+            "description": "Enable pretty-printing for gdb",
+            "text": "-enable-pretty-printing",
+            "ignoreFailures": true
+          }
+        ],
+        "miDebuggerServerAddress": "192.168.48.1:24689",
+        "serverLaunchTimeout": 10000,
+      }
+    ]
+  }

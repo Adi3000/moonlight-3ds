@@ -1,0 +1,6 @@
+[
+    {
+        "name": "DevKitPro",
+        "toolchainFile": "/opt/devkitpro/cmake/3DS.cmake"
+    }
+ ]
