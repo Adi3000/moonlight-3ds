@@ -1,11 +1,17 @@
 /.vscode/
 /build/
 /dist/
+/CMakeFiles/
+/external/
 *.3dsx
 *.cia
 *.smdh
 *.elf
 *.zip
-
+**/CMakeCache.txt
+**/compile_commands.json
+**/CMakeCache.txt
+**/cmake_install.cmake
+Makefile
 # will be auto-copied from 'make dist'
 dist/*/moonlight.conf

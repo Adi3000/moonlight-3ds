@@ -1,213 +1,188 @@
-cmake_minimum_required(VERSION 3.1)
-project(moonlight-embedded VERSION 2.5.3 LANGUAGES C)
-SET(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-SET(CMAKE_C_STANDARD 99)
-include(${CMAKE_ROOT}/Modules/GNUInstallDirs.cmake)
-include(${CMAKE_SOURCE_DIR}/cmake/generate_version_header.cmake)
+cmake_minimum_required(VERSION 3.12...3.15)
+set(DEVKITPRO "/opt/devkitpro")
+set(DEVKITARM "/opt/devkitpro/devkitARM")
+set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/DevkitArm3DS.cmake")
 
-aux_source_directory(./src SRC_LIST)
-list(APPEND SRC_LIST ./src/input/evdev.c ./src/input/mapping.c ./src/input/udev.c)
+project(moonlight-3ds 
+    VERSION 1.0.0 
+    DESCRIPTION "A 3DS Moonlight client"
+    LANGUAGES CXX)
+enable_language(ASM)
+enable_language(C)
 
-set(MOONLIGHT_DEFINITIONS)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(ALSA)
-find_package(Opus REQUIRED)
-find_package(Broadcom-OMX)
-find_package(Freescale)
-find_package(Amlogic)
-find_package(Rockchip)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(PkgConfig REQUIRED)
 
-option(ENABLE_SDL "Compile SDL support" ON)
-option(ENABLE_FFMPEG "Compile FFMPEG support" ON)
-option(ENABLE_X11 "Compile X11 support (requires ENABLE_FFMPEG)" ON)
-option(ENABLE_CEC "Compile CEC support" ON)
-option(ENABLE_PULSE "Compile PulseAudio support" ON)
+set(3DS TRUE) 
+set(__3DS__ TRUE) 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_VERSION DKA-3DS-52)
+set(CMAKE_SYSTEM_PROCESSOR armv6k)
+set(EXPAT_DEV_URANDOM ON)
+set(EXPAT_BUILD_EXAMPLES OFF)
+set(EXPAT_BUILD_DOCS OFF)
+set(EXPAT_BUILD_TESTS OFF)
 
-pkg_check_modules(EVDEV REQUIRED libevdev)
-pkg_check_modules(UDEV REQUIRED libudev)
-if (ENABLE_SDL)
-  pkg_check_modules(SDL sdl2>=2.0.4)
-endif()
-if (ENABLE_FFMPEG)
-  pkg_check_modules(AVCODEC libavcodec)
-  pkg_check_modules(AVUTIL libavutil)
-  pkg_check_modules(VDPAU vdpau)
-  pkg_check_modules(LIBVA libva)
-  pkg_check_modules(EGL egl)
-  pkg_check_modules(GLES glesv2)
 
-  if (ENABLE_X11)
-    pkg_check_modules(XLIB x11)
-    pkg_check_modules(LIBVA_X11 libva-x11)
-  endif()
-endif()
-if (ENABLE_PULSE)
-  pkg_check_modules(PULSE libpulse-simple)
-endif()
-if (ENABLE_CEC)
-  pkg_check_modules(CEC libcec>=4)
-endif()
+string(APPEND CMAKE_C_FLAGS " ${DKA_SUGGESTED_C_FLAGS} -Wall -Wextra ")
+string(APPEND CMAKE_CXX_FLAGS " ${DKA_SUGGESTED_CXX_FLAGS} -Wno-psabi -Wall -Wextra")
+add_link_options(-Wl,-Map,moonlight-3ds.map)
+add_link_options(-Wl,--wrap,malloc,--wrap,realloc,--wrap,free,--wrap,_free_r,--wrap,memalign)
+add_link_options(-Wl,--wrap,APT_GetAppCpuTimeLimit,--wrap,APT_SetAppCpuTimeLimit)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 
-pkg_check_modules(MMAL mmal)
-if (NOT MMAL_FOUND)
-  find_package(MMAL)
-endif()
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake")
 
-set(VDPAU_ACCEL_FOUND FALSE)
-set(VA_ACCEL_FOUND FALSE)
-set(SOFTWARE_FOUND FALSE)
+include(Tools3DS)
 
-if(AVCODEC_FOUND AND AVUTIL_FOUND)
-  if(EGL_FOUND AND GLES_FOUND AND XLIB_FOUND)
-    set(X11_FOUND TRUE)
-    if(VDPAU_FOUND)
-      set(VDPAU_ACCEL_FOUND TRUE)
-    endif()
-    if (LIBVA_FOUND AND LIBVA_X11_FOUND)
-      set(VA_ACCEL_FOUND TRUE)
-    endif()
-  endif()
-  if(SDL_FOUND OR X11_FOUND)
-    set(SOFTWARE_FOUND TRUE)
-  endif()
-endif()
+include(ExternalProject)
+ExternalProject_Add(moonlight-git
+    GIT_REPOSITORY      https://github.com/Adi3000/moonlight-common-c.git
+    BINARY_DIR          ${CMAKE_CURRENT_SOURCE_DIR}/build/moonlight/lib
+    GIT_TAG             origin/feat/3ds-compatibility
+    PREFIX              external/moonlight
+    CMAKE_ARGS          -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/3DS.cmake -DUSE_MBEDTLS=ON
+    INSTALL_COMMAND     cmake -E echo "Skipping install step."
+)
+ExternalProject_Get_Property(moonlight-git BINARY_DIR)
+ExternalProject_Get_Property(moonlight-git SOURCE_DIR)
+set(MOONLIGHT_SOURCE_DIR "${SOURCE_DIR}/src")
+message("Will provide source moonlight here : ${MOONLIGHT_SOURCE_DIR}")
+set(MOONLIGHT_BINARY_DIR ${BINARY_DIR})
+message("Will provide lib moonlight here : ${MOONLIGHT_BINARY_DIR}")
+add_library(moonlight STATIC IMPORTED)
+add_library(enet STATIC IMPORTED)
+set_target_properties(moonlight PROPERTIES 
+    IMPORTED_LOCATION ${MOONLIGHT_BINARY_DIR}/libmoonlight-common-c.a)
+set_target_properties(enet 
+    PROPERTIES IMPORTED_LOCATION ${MOONLIGHT_BINARY_DIR}/enet/libenet.a)
 
-SET(MOONLIGHT_COMMON_INCLUDE_DIR ./third_party/moonlight-common-c/src)
-SET(GAMESTREAM_INCLUDE_DIR ./libgamestream)
+ExternalProject_Add(pugixml-git
+    GIT_REPOSITORY      https://github.com/zeux/pugixml.git
+    BINARY_DIR          ${CMAKE_CURRENT_SOURCE_DIR}/build/pugixml/lib
+    GIT_TAG             origin/master
+    PREFIX              external/pugixml
+    CMAKE_ARGS          -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/3DS.cmake -DPUGIXML_INSTALL=OFF
+    INSTALL_COMMAND     cmake -E echo "Skipping install step."
+)
+ExternalProject_Get_Property(pugixml-git BINARY_DIR)
+ExternalProject_Get_Property(pugixml-git SOURCE_DIR)
+set(PUGIXML_SOURCE_DIR "${SOURCE_DIR}/src")
+message("Will provide source pugixml here : ${PUGIXML_SOURCE_DIR}")
+set(PUGIXML_BINARY_DIR ${BINARY_DIR})
+message("Will provide lib pugixml here : ${PUGIXML_BINARY_DIR}")
+add_library(pugixml STATIC IMPORTED)
+set_target_properties(pugixml PROPERTIES 
+    IMPORTED_LOCATION ${PUGIXML_BINARY_DIR}/libpugixml.a)
 
-include_directories("${PROJECT_BINARY_DIR}")
+ExternalProject_Add(sdl2-git
+    GIT_REPOSITORY      https://github.com/libsdl-org/SDL.git
+    BINARY_DIR          ${CMAKE_CURRENT_SOURCE_DIR}/build/sdl2/lib
+    GIT_TAG             origin/main
+    PREFIX              external/sdl2
+    CMAKE_ARGS          -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/3DS.cmake
+    INSTALL_COMMAND     cmake -E echo "Skipping install step."
+)
 
-add_subdirectory(libgamestream)
+ExternalProject_Get_Property(sdl2-git BINARY_DIR)
+ExternalProject_Get_Property(sdl2-git SOURCE_DIR)
+set(SDL2_SOURCE_DIR "${SOURCE_DIR}/src")
+message("Will provide source sdl2 here : ${SDL2_SOURCE_DIR}")
+set(SDL2_BINARY_DIR ${BINARY_DIR})
+message("Will provide lib sdl2 here : ${SDL2_BINARY_DIR}")
+add_library(sdl2 STATIC IMPORTED)
+set_target_properties(sdl2 PROPERTIES 
+    IMPORTED_LOCATION ${SDL2_BINARY_DIR}/libpugixml.a)
 
-add_executable(moonlight ${SRC_LIST})
-target_link_libraries(moonlight m)
-target_link_libraries(moonlight gamestream)
+link_directories(
+    "${DEVKITPRO}/libctru/lib"
+    "${DEVKITPRO}/portlibs/3ds/lib"
+    "${DEVKITPRO}/extra_lib/lib"
+)
+include_directories(
+    "${DEVKITPRO}/extra_lib/include"
+    "${DEVKITPRO}/libctru/include"
+    "${DEVKITPRO}/portlibs/3ds/include"
+    "${MOONLIGHT_SOURCE_DIR}"
+    "${MOONLIGHT_SOURCE_DIR}/enet/include"
+    "${PUGIXML_SOURCE_DIR}"
+# ??"${SDL2_SOURCE_DIR}"
+)
 
-if (CEC_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_LIBCEC)
-  list(APPEND MOONLIGHT_OPTIONS CEC)
-  target_sources(moonlight PRIVATE ./src/input/cec.c)
-  target_include_directories(moonlight PRIVATE ./third_party/libcec ${CEC_INCLUDE_DIRS})
-  target_link_libraries(moonlight ${CEC_LIBRARIES})
-endif()
+set(TARGET_SOURCE_LIST "")
+file(GLOB_RECURSE MAIN_SOURCE_LIST_CPP CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE MAIN_SOURCE_LIST_C "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+list(APPEND TARGET_SOURCE_LIST ${MAIN_SOURCE_LIST_C})
+list(APPEND TARGET_SOURCE_LIST ${MAIN_SOURCE_LIST_CPP})
+file(GLOB LIB_BASE64_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/library/base64/*.cpp")
+list(APPEND TARGET_SOURCE_LIST ${LIB_BASE64_SOURCES})
 
-if(AMLOGIC_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_AML)
-  list(APPEND MOONLIGHT_OPTIONS AML)
-  add_library(moonlight-aml SHARED ./src/video/aml.c ${ILCLIENT_SRC_LIST})
-  target_include_directories(moonlight-aml PRIVATE ${AMLOGIC_INCLUDE_DIRS} ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR})
-  target_link_libraries(moonlight-aml gamestream ${AMLOGIC_LIBRARIES})
-  set_property(TARGET moonlight-aml PROPERTY COMPILE_DEFINITIONS ${AMLOGIC_DEFINITIONS})
-  install(TARGETS moonlight-aml DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
+set(TARGET_HEADER_LIST "")
+file(GLOB_RECURSE MAIN_HEADER_LIST_HPP CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
+file(GLOB_RECURSE MAIN_HEADER_LIST_H "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+list(APPEND TARGET_HEADER_LIST ${MAIN_HEADER_LIST_H})
+list(APPEND TARGET_HEADER_LIST ${MAIN_HEADER_LIST_HPP})
+set_source_files_properties(${MAIN_SOURCE_LIST_C} PROPERTIES LANGUAGE C)
 
-if(BROADCOM-OMX_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_PI)
-  list(APPEND MOONLIGHT_OPTIONS PI)
-  aux_source_directory(./third_party/ilclient ILCLIENT_SRC_LIST)
-  add_library(moonlight-pi SHARED ./src/video/pi.c ./src/audio/omx.c ${ILCLIENT_SRC_LIST})
-  target_include_directories(moonlight-pi PRIVATE ./third_party/ilclient ${BROADCOM_INCLUDE_DIRS} ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR} ${OPUS_INCLUDE_DIRS})
-  target_link_libraries(moonlight-pi gamestream ${BROADCOM_OMX_LIBRARIES} ${OPUS_LIBRARY})
-  set_property(TARGET moonlight-pi PROPERTY COMPILE_DEFINITIONS ${BROADCOM_OMX_DEFINITIONS})
-  install(TARGETS moonlight-pi DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
 
-if(MMAL_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_MMAL)
-  list(APPEND MOONLIGHT_OPTIONS MMAL)
-  add_library(moonlight-mmal SHARED ./src/video/mmal.c)
-  target_include_directories(moonlight-mmal PRIVATE ${MMAL_INCLUDE_DIRS} ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR})
-  target_link_libraries(moonlight-mmal gamestream ${MMAL_LINK_LIBRARIES})
-  install(TARGETS moonlight-mmal DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
 
-if(FREESCALE_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_IMX)
-  list(APPEND MOONLIGHT_OPTIONS IMX)
-  add_library(moonlight-imx SHARED ./src/video/imx.c ./src/video/imx_vpu.c)
-  target_include_directories(moonlight-imx PRIVATE ${FREESCALE_INCLUDE_DIRS} ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR})
-  target_link_libraries(moonlight-imx gamestream ${FREESCALE_LIBRARIES})
-  install(TARGETS moonlight-imx DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
+set(ROMFS_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/romfs")
+set(ICON_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/resource/icon.png")
+add_executable(moonlight3ds ${TARGET_SOURCE_LIST} ${TARGET_HEADER_LIST})
+set(AUTHOR "Adi3000 and to the moonlight-3ds project")
+target_include_directories(moonlight3ds PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/library")
+target_link_libraries(moonlight3ds 
+    swresample 
+    avformat 
+    swscale 
+    avcodec 
+    avutil 
+    citro2dd 
+    citro3dd
+    m 
+    x264 
+    mp3lame 
+    dav1d 
+    curl 
+    mbedtls 
+    mbedx509 
+    mbedcrypto 
+    z 
+    ctrud
+    moonlight
+    enet
+    sdl2
+    pugixml
+)
+#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/system/test.s" PROPERTY LANGUAGE ASM)
+#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/system/util/yuv420p_rgb565le.s" PROPERTY LANGUAGE ASM)
+#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/system/util/yuv420p_rgb888le.s" PROPERTY LANGUAGE ASM)
+#target_sources(moonlight3ds PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/system/test.s")
+#target_sources(moonlight3ds PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/system/util/yuv420p_rgb565le.s")
+#target_sources(moonlight3ds PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/system/util/yuv420p_rgb888le.s")
+#install(TARGETS moonlight3ds RUNTIME DESTINATION /mnt/g/Utils/CIAServer1.2/)
 
-if(ROCKCHIP_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_ROCKCHIP)
-  list(APPEND MOONLIGHT_OPTIONS ROCKCHIP)
-  add_library(moonlight-rk SHARED ./src/video/rk.c)
-  target_include_directories(moonlight-rk PRIVATE ${ROCKCHIP_INCLUDE_DIRS} ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR})
-  target_link_libraries(moonlight-rk gamestream ${ROCKCHIP_LIBRARIES})
-  set_property(TARGET moonlight-rk PROPERTY COMPILE_DEFINITIONS ${ROCKCHIP_DEFINITIONS})
-  install(TARGETS moonlight-rk DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
 
-if (SOFTWARE_FOUND)
-  target_sources(moonlight PRIVATE ./src/video/ffmpeg.c)
-  target_include_directories(moonlight PRIVATE ${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS})
-  target_link_libraries(moonlight ${AVCODEC_LIBRARIES} ${AVUTIL_LIBRARIES})
-  if(SDL_FOUND)
-    list(APPEND MOONLIGHT_DEFINITIONS HAVE_SDL)
-    list(APPEND MOONLIGHT_OPTIONS SDL)
-    target_sources(moonlight PRIVATE ./src/video/sdl.c ./src/audio/sdl.c ./src/input/sdl.c)
-    target_include_directories(moonlight PRIVATE ${SDL_INCLUDE_DIRS})
-    target_link_libraries(moonlight ${SDL_LIBRARIES})
-  endif()
-  if(X11_FOUND)
-    list(APPEND MOONLIGHT_DEFINITIONS HAVE_X11)
-    list(APPEND MOONLIGHT_OPTIONS X11)
-    target_sources(moonlight PRIVATE ./src/video/x11.c ./src/video/egl.c ./src/input/x11.c)
-    target_include_directories(moonlight PRIVATE ${XLIB_INCLUDE_DIRS} ${EGL_INCLUDE_DIRS} ${GLES_INCLUDE_DIRS})
-    target_link_libraries(moonlight ${XLIB_LIBRARIES} ${EGL_LIBRARIES} ${GLES_LIBRARIES})
-  endif()
-  if(VDPAU_ACCEL_FOUND)
-    list(APPEND MOONLIGHT_DEFINITIONS HAVE_VDPAU)
-    list(APPEND MOONLIGHT_OPTIONS VDPAU)
-    target_include_directories(moonlight PRIVATE ${VDPAU_INCLUDE_DIRS})
-    target_link_libraries(moonlight ${VDPAU_LIBRARIES})
-  endif()
-  if(VA_ACCEL_FOUND)
-    list(APPEND MOONLIGHT_DEFINITIONS HAVE_VAAPI)
-    list(APPEND MOONLIGHT_OPTIONS VAAPI)
-    target_sources(moonlight PRIVATE ./src/video/ffmpeg_vaapi.c)
-    target_include_directories(moonlight PRIVATE ${LIBVA_INCLUDE_DIRS} ${LIBVA_X11_INCLUDE_DIRS})
-    target_link_libraries(moonlight ${LIBVA_LIBRARIES} ${LIBVA_X11_LIBRARIES})
-  endif()
-endif()
-
-if (ALSA_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_ALSA)
-  list(APPEND MOONLIGHT_OPTIONS ALSA)
-  target_sources(moonlight PRIVATE ./src/audio/alsa.c)
-  target_include_directories(moonlight PRIVATE ${ALSA_INCLUDE_DIR})
-  target_link_libraries(moonlight ${ALSA_LIBRARY})
-endif()
-
-if (PULSE_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_PULSE)
-  list(APPEND MOONLIGHT_OPTIONS PULSE)
-  target_sources(moonlight PRIVATE ./src/audio/pulse.c)
-  target_include_directories(moonlight PRIVATE ${PULSE_INCLUDE_DIRS})
-  target_link_libraries(moonlight ${PULSE_LIBRARIES})
-endif()
-
-if (AMLOGIC_FOUND OR BROADCOM-OMX_FOUND OR MMAL_FOUND OR FREESCALE_FOUND OR ROCKCHIP_FOUND OR X11_FOUND)
-  list(APPEND MOONLIGHT_DEFINITIONS HAVE_EMBEDDED)
-  list(APPEND MOONLIGHT_OPTIONS EMBEDDED)
-endif()
-
-if(NOT AMLOGIC_FOUND AND NOT BROADCOM-OMX_FOUND AND NOT MMAL_FOUND AND NOT FREESCALE_FOUND AND NOT ROCKCHIP_FOUND AND NOT SOFTWARE_FOUND)
-  message(FATAL_ERROR "No video output available")
-endif()
-
-configure_file("./src/configuration.h.in" "${PROJECT_BINARY_DIR}/configuration.h")
-
-set_property(TARGET moonlight PROPERTY COMPILE_DEFINITIONS ${MOONLIGHT_DEFINITIONS})
-target_include_directories(moonlight PRIVATE ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR} ${OPUS_INCLUDE_DIRS} ${EVDEV_INCLUDE_DIRS} ${UDEV_INCLUDE_DIRS})
-target_link_libraries(moonlight ${EVDEV_LIBRARIES} ${OPUS_LIBRARY} ${UDEV_LIBRARIES} ${CMAKE_DL_LIBS})
-
-add_subdirectory(docs)
-
-install(TARGETS moonlight DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES ./third_party/SDL_GameControllerDB/gamecontrollerdb.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/moonlight)
-install(FILES moonlight.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
+add_3dsx_target(moonlight3ds       
+    ${CMAKE_PROJECT_NAME} # Name
+    ${CMAKE_PROJECT_DESCRIPTION} # Description
+    ${AUTHOR} # Author(s)
+    ${ROMFS_LOCATION} # RomFS
+    ${ICON_LOCATION} # Icon
+)
+add_cia_target(moonlight3ds 
+    "${CMAKE_CURRENT_SOURCE_DIR}/resource/app.rsf" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/resource/banner.png"  
+    "${CMAKE_CURRENT_SOURCE_DIR}/resource/banner.wav"  
+    ${ROMFS_LOCATION} # RomFS
+    ${CMAKE_PROJECT_NAME} # Name
+    ${CMAKE_PROJECT_DESCRIPTION} # Description
+    ${AUTHOR} # Author(s)
+    "${CMAKE_CURRENT_SOURCE_DIR}/resource/icon.png"
+)
